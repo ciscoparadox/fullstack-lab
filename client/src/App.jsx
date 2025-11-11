@@ -100,6 +100,9 @@ function App() {
   const [theme, setTheme] = useState("dark");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState("all");
+  const [title, setTitle] = useState("");
+  const [tags, setTags] = useState("");
+  const [energy, setEnergy] = useState(5);
 
   // Extract unique clusters from entries for dynamic rendering
   const uniqueClusters = useMemo(() => {
@@ -137,6 +140,43 @@ function App() {
   const hasTextOrDateFilters = useMemo(() => {
     return searchQuery.trim().length > 0 || dateRange !== "all";
   }, [searchQuery, dateRange]);
+
+  // Compute trends from entries
+  const trends = useMemo(() => {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Get unique dates as YYYY-MM-DD strings
+    const dateSet = new Set(
+      entries.map(e => new Date(e.timestamp).toISOString().split('T')[0])
+    );
+
+    // Count last 7 and 30 days
+    const last7Days = entries.filter(e => new Date(e.timestamp) >= sevenDaysAgo).length;
+    const last30Days = entries.filter(e => new Date(e.timestamp) >= thirtyDaysAgo).length;
+
+    // Calculate current streak (consecutive days ending at most recent log)
+    let currentStreak = 0;
+    if (entries.length > 0) {
+      // Find the most recent log date
+      const mostRecentTimestamp = Math.max(...entries.map(e => new Date(e.timestamp).getTime()));
+      let checkDate = new Date(mostRecentTimestamp);
+      checkDate.setHours(0, 0, 0, 0);
+      
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (dateSet.has(dateStr)) {
+          currentStreak++;
+          checkDate.setDate(checkDate.getDate() - 1); // Go back one day
+        } else {
+          break; // Gap found
+        }
+      }
+    }
+
+    return { last7Days, last30Days, currentStreak };
+  }, [entries]);
 
   // Load moods once on mount
   useEffect(() => {
@@ -200,10 +240,23 @@ function App() {
     e.preventDefault();
     if (!mood.trim()) return;
 
+    // Build combined mood string
+    const parts = [];
+    if (title.trim()) parts.push(`title=${title.trim()}`);
+    if (tags.trim()) parts.push(`tags=${tags.trim()}`);
+    if (energy && energy !== 5) parts.push(`energy=${energy}`); // Only include if not default
+
+    const combinedMood = parts.length > 0 
+      ? `${mood.trim()} [${parts.join("; ")}]` 
+      : mood.trim();
+
     try {
-      const saved = await postMood(mood);
+      const saved = await postMood(combinedMood);
       setEntries((prev) => [...prev, saved]);
       setMood("");
+      setTitle("");
+      setTags("");
+      setEnergy(5);
 
       // Refresh stats after adding new mood
       await refreshStats();
@@ -255,7 +308,7 @@ function App() {
   // Filter entries based on selected cluster, search query, and date range
   const filteredEntries = useMemo(() => {
     let result = entries;
-    
+
     // Apply cluster filter
     if (selectedCluster !== "all") {
       const clusterNum = Number(selectedCluster);
@@ -265,32 +318,32 @@ function App() {
         entry.cluster === clusterNum
       );
     }
-    
+
     // Apply text search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(entry => 
+      result = result.filter(entry =>
         entry.mood.toLowerCase().includes(query)
       );
     }
-    
+
     // Apply date range filter
     if (dateRange !== "all") {
       const now = new Date();
       const cutoffDate = new Date();
-      
+
       if (dateRange === "7days") {
         cutoffDate.setDate(now.getDate() - 7);
       } else if (dateRange === "30days") {
         cutoffDate.setDate(now.getDate() - 30);
       }
-      
+
       result = result.filter(entry => {
         const entryDate = new Date(entry.timestamp);
         return entryDate >= cutoffDate;
       });
     }
-    
+
     return result;
   }, [entries, selectedCluster, searchQuery, dateRange]);
 
@@ -355,6 +408,27 @@ function App() {
             </div>
           )}
 
+          {/* Trends Section */}
+          {entries.length > 0 && (
+            <div className="trends-section" style={styles.trendsSection}>
+              <h3 style={styles.trendsTitle}>Trends</h3>
+              <div className="trends-cards" style={styles.trendsCards}>
+                <div className="trend-card" style={styles.trendCard}>
+                  <div style={styles.trendLabel}>Last 7 Days</div>
+                  <div style={styles.trendValue}>{trends.last7Days}</div>
+                </div>
+                <div className="trend-card" style={styles.trendCard}>
+                  <div style={styles.trendLabel}>Last 30 Days</div>
+                  <div style={styles.trendValue}>{trends.last30Days}</div>
+                </div>
+                <div className="trend-card" style={styles.trendCard}>
+                  <div style={styles.trendLabel}>Current Streak</div>
+                  <div style={styles.trendValue}>{trends.currentStreak} days</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Mood Frequency Chart */}
           {moodFrequencyData.length > 0 && (
             <div className="chart-card" style={styles.chartCard}>
@@ -415,6 +489,38 @@ function App() {
               onChange={(e) => setMood(e.target.value)}
               disabled={isClustering}
             />
+            <div style={styles.richFieldsGrid}>
+              <input
+                type="text"
+                style={styles.richInput}
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                disabled={isClustering}
+              />
+              <input
+                type="text"
+                style={styles.richInput}
+                placeholder="Tags, comma separated (optional)"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                disabled={isClustering}
+              />
+              <div style={styles.energyField}>
+                <label style={styles.energyLabel}>
+                  Energy: <span style={styles.energyValue}>{energy}</span>
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={energy}
+                  onChange={(e) => setEnergy(Number(e.target.value))}
+                  disabled={isClustering}
+                  style={styles.energySlider}
+                />
+              </div>
+            </div>
             <button
               type="submit"
               style={{
@@ -658,11 +764,76 @@ const stylesDark = {
   statCount: {
     color: "#a0aec0",
   },
+  trendsSection: {
+    marginTop: "1.5rem",
+    paddingTop: "1.5rem",
+    borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+  },
+  trendsTitle: {
+    color: "#cbd5e0",
+    marginBottom: "1rem",
+    fontSize: "1.1rem",
+  },
+  trendsCards: {
+    display: "flex",
+    gap: "1rem",
+    flexWrap: "wrap",
+  },
+  trendCard: {
+    background: "rgba(102, 126, 234, 0.08)",
+    border: "1px solid rgba(102, 126, 234, 0.15)",
+    borderRadius: "8px",
+    padding: "1rem",
+    flex: 1,
+    minWidth: "120px",
+  },
+  trendLabel: {
+    color: "#a0aec0",
+    fontSize: "0.85rem",
+    marginBottom: "0.25rem",
+  },
+  trendValue: {
+    color: "#e2e8f0",
+    fontSize: "1.5rem",
+    fontWeight: 600,
+  },
   form: {},
   input: {
     background: "rgba(255, 255, 255, 0.05)",
     border: "1px solid rgba(255, 255, 255, 0.1)",
     color: "#f5f5f5",
+  },
+  richFieldsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "1rem",
+    marginTop: "0.75rem",
+  },
+  richInput: {
+    padding: "0.75rem 1rem",
+    fontSize: "1rem",
+    borderRadius: "8px",
+    background: "rgba(255, 255, 255, 0.05)",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    color: "#f5f5f5",
+    transition: "border-color 0.2s ease",
+  },
+  energyField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+  },
+  energyLabel: {
+    color: "#a0aec0",
+    fontSize: "0.9rem",
+  },
+  energyValue: {
+    color: "#667eea",
+    fontWeight: 600,
+  },
+  energySlider: {
+    width: "100%",
+    cursor: "pointer",
   },
   button: {
     background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
@@ -846,11 +1017,76 @@ const stylesLight = {
   statCount: {
     color: "#718096",
   },
+  trendsSection: {
+    marginTop: "1.5rem",
+    paddingTop: "1.5rem",
+    borderTop: "1px solid rgba(0, 0, 0, 0.05)",
+  },
+  trendsTitle: {
+    color: "#2d3748",
+    marginBottom: "1rem",
+    fontSize: "1.1rem",
+  },
+  trendsCards: {
+    display: "flex",
+    gap: "1rem",
+    flexWrap: "wrap",
+  },
+  trendCard: {
+    background: "rgba(102, 126, 234, 0.05)",
+    border: "1px solid rgba(102, 126, 234, 0.1)",
+    borderRadius: "8px",
+    padding: "1rem",
+    flex: 1,
+    minWidth: "120px",
+  },
+  trendLabel: {
+    color: "#4a5568",
+    fontSize: "0.85rem",
+    marginBottom: "0.25rem",
+  },
+  trendValue: {
+    color: "#2d3748",
+    fontSize: "1.5rem",
+    fontWeight: 600,
+  },
   form: {},
   input: {
     background: "rgba(255, 255, 255, 0.7)",
     border: "1px solid rgba(0, 0, 0, 0.1)",
     color: "#2d3748",
+  },
+  richFieldsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "1rem",
+    marginTop: "0.75rem",
+  },
+  richInput: {
+    padding: "0.75rem 1rem",
+    fontSize: "1rem",
+    borderRadius: "8px",
+    background: "rgba(255, 255, 255, 0.7)",
+    border: "1px solid rgba(0, 0, 0, 0.1)",
+    color: "#2d3748",
+    transition: "border-color 0.2s ease",
+  },
+  energyField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+  },
+  energyLabel: {
+    color: "#4a5568",
+    fontSize: "0.9rem",
+  },
+  energyValue: {
+    color: "#667eea",
+    fontWeight: 600,
+  },
+  energySlider: {
+    width: "100%",
+    cursor: "pointer",
   },
   button: {
     background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
