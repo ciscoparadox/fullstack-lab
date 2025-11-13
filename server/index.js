@@ -299,47 +299,96 @@ function insertMoodIntoDb(entry) {
     });
 }
 
+/**
+ * Get moods enriched with cluster + metadata (used by /moods and /moods/search)
+ */
+function getEnrichedMoods() {
+  const moods = loadMoods();
+
+  if (!moods.length) {
+    return [];
+  }
+
+  const clustered = loadClusteredMoods();
+  const clusterMeta = loadClusterMeta();
+
+  // Build lookup for cluster assignments by timestamp
+  const clusterByTs = new Map(
+    clustered
+      .filter((entry) => entry && entry.timestamp)
+      .map((entry) => [entry.timestamp, entry.cluster])
+  );
+
+  // Build lookup for cluster metadata by cluster ID
+  const clusterMetaById = new Map(
+    clusterMeta.clusters.map((c) => [c.id, c])
+  );
+
+  return moods.map((entry) => {
+    const clusterId = clusterByTs.get(entry.timestamp);
+    const hasValidCluster = typeof clusterId === "number";
+
+    return {
+      ...entry,
+      cluster: hasValidCluster ? clusterId : null,
+      cluster_label:
+        hasValidCluster && clusterMetaById.has(clusterId)
+          ? clusterMetaById.get(clusterId).label
+          : null,
+      quality_rating: hasValidCluster ? clusterMeta.quality_rating : null,
+    };
+  });
+}
+
 // GET /moods -> moods enriched with cluster and metadata if available
 app.get("/moods", (req, res, next) => {
   try {
-    const moods = loadMoods();
+    const enriched = getEnrichedMoods();
+    res.json(enriched);
+  } catch (err) {
+    next(err);
+  }
+});
 
-    // If there are no moods, skip reading cluster files entirely
-    if (!moods.length) {
+// GET /moods/search -> text search on mood (V1 semantic search)
+app.get("/moods/search", (req, res, next) => {
+  try {
+    const { query, limit } = req.query;
+
+    if (!query || !query.trim()) {
+      return res.status(400).json({ error: "query is required" });
+    }
+
+    let max = parseInt(limit, 10);
+    if (Number.isNaN(max)) max = 20;
+    if (max < 1) max = 1;
+    if (max > 100) max = 100;
+
+    const q = query.trim().toLowerCase();
+
+    const enriched = getEnrichedMoods();
+    if (!enriched.length) {
       return res.json([]);
     }
 
-    const clustered = loadClusteredMoods();
-    const clusterMeta = loadClusterMeta();
-
-    // Build lookup for cluster assignments by timestamp
-    const clusterByTs = new Map(
-      clustered
-        .filter((entry) => entry && entry.timestamp)
-        .map((entry) => [entry.timestamp, entry.cluster])
+    // Filter by case-insensitive substring match on mood text
+    const filtered = enriched.filter(
+      (entry) =>
+        typeof entry.mood === "string" &&
+        entry.mood.toLowerCase().includes(q)
     );
 
-    // Build lookup for cluster metadata by cluster ID
-    const clusterMetaById = new Map(
-      clusterMeta.clusters.map((c) => [c.id, c])
-    );
-
-    const enriched = moods.map((entry) => {
-      const clusterId = clusterByTs.get(entry.timestamp);
-      const hasValidCluster = typeof clusterId === "number";
-
-      return {
-        ...entry,
-        cluster: hasValidCluster ? clusterId : null,
-        cluster_label:
-          hasValidCluster && clusterMetaById.has(clusterId)
-            ? clusterMetaById.get(clusterId).label
-            : null,
-        quality_rating: hasValidCluster ? clusterMeta.quality_rating : null,
-      };
+    // Sort by timestamp descending (most recent first)
+    filtered.sort((a, b) => {
+      const aTime = new Date(a.timestamp).getTime();
+      const bTime = new Date(b.timestamp).getTime();
+      return bTime - aTime;
     });
 
-    res.json(enriched);
+    // Apply limit
+    const limited = filtered.slice(0, max);
+
+    res.json(limited);
   } catch (err) {
     next(err);
   }
@@ -437,6 +486,27 @@ app.get("/moods/db-preview", async (req, res, next) => {
   }
 });
 
+// GET /moods/stats -> return total count and mood frequency counts
+app.get("/moods/stats", (req, res, next) => {
+  try {
+    const moods = loadMoods();
+    
+    const total = moods.length;
+    const counts = {};
+    
+    moods.forEach((entry) => {
+      if (entry && entry.mood) {
+        const moodText = entry.mood.trim();
+        counts[moodText] = (counts[moodText] || 0) + 1;
+      }
+    });
+    
+    res.json({ total, counts });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Error handling middleware - must be defined after all routes
 app.use((err, req, res, next) => {
   console.error("[Error Middleware] Unhandled error:");
@@ -448,4 +518,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[Server] Listening on http://localhost:${PORT}`);
 });
-

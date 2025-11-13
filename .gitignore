@@ -1,28 +1,23 @@
-# Node dependencies
-**/node_modules
-
-# Python venvs
-**/.venv
-
-# Logs / debug
+# Node
+node_modules/
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+yarn.lock
 
-# Env/config
+# Env
 .env
-*.env
+.env.local
 
-# Generated data files
+# Python venv
+ml/.venv/
+# Any future venvs
+**/.venv/
+# Generated server data
 server/moods.json
 server/mood_clusters.json
+server/cluster_meta.json
 
-# Vite / build outputs (if you build later)
-dist
-client/dist
-node_modules
-
-
-
-
+# Editor junk
+*.swp
+*.swo
+*~
 
