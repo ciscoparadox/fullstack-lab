@@ -16,6 +16,7 @@ import StatsSection from "./components/StatsSection";
 import TrendsSection from "./components/TrendsSection";
 import MoodForm from "./components/MoodForm";
 import FiltersSection from "./components/FiltersSection";
+import MoodList from "./components/MoodList";
 import "./App.css";
 
 const API_URL = "http://localhost:4000";
@@ -631,176 +632,18 @@ function App() {
             styles={styles}
           />
 
-          <div className="list-section" style={styles.listSection}>
-            <div className="list-header" style={styles.listHeader}>
-              <h2 style={styles.listTitle}>Your Moods</h2>
-              {!isLoading && entries.length > 0 && (
-                <button
-                  onClick={handleClearList}
-                  style={styles.clearButton}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)";
-                    e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.5)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
-                    e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.3)";
-                  }}
-                  onMouseDown={(e) => {
-                    e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)";
-                    e.currentTarget.style.transform = "scale(0.98)";
-                  }}
-                  onMouseUp={(e) => {
-                    e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)";
-                    e.currentTarget.style.transform = "scale(1)";
-                  }}
-                >
-                  🗑️ Clear List
-                </button>
-              )}
-            </div>
-
-            {isLoading ? (
-              <div className="loading-container" style={styles.loadingContainer}>
-                <p style={styles.loading}>Loading your moods...</p>
-              </div>
-            ) : filteredEntries.length === 0 ? (
-              <div className="empty-state" style={styles.emptyState}>
-                <p style={styles.emptyText}>
-                  {hasTextOrDateFilters
-                    ? "No moods match these filters"
-                    : selectedCluster === "all"
-                    ? "No moods logged yet."
-                    : `No moods in Cluster ${selectedCluster}.`
-                  }
-                </p>
-                <p style={styles.emptySubtext}>
-                  {hasTextOrDateFilters
-                    ? "Try adjusting your search or filters 👆"
-                    : selectedCluster === "all"
-                    ? "Start by logging how you're feeling above! 👆"
-                    : "Try selecting a different cluster or log more moods! 👆"
-                  }
-                </p>
-              </div>
-            ) : (
-              <ul className="moods-list" style={styles.list}>
-                {filteredEntries.map((entry) => {
-                  const parsed = parseMoodMetadata(entry.mood);
-                  const isSelected = selectedMood?.timestamp === entry.timestamp;
-
-                  return (
-                    <div key={entry.timestamp} style={{ marginBottom: "0.5rem" }}>
-                      {isSelected && (
-                        <div style={styles.detailPanel}>
-                          <div style={styles.detailPanelHeader}>
-                            <h3 style={styles.detailPanelTitle}>Mood Details</h3>
-                            <button
-                              onClick={() => setSelectedMood(null)}
-                              style={styles.detailPanelClose}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          <div style={styles.detailPanelContent}>
-                            <div style={styles.detailRow}>
-                              <span style={styles.detailLabel}>Mood:</span>
-                              <span style={styles.detailValue}>{parsed.text}</span>
-                            </div>
-                            {parsed.title && (
-                              <div style={styles.detailRow}>
-                                <span style={styles.detailLabel}>Title:</span>
-                                <span style={styles.detailValue}>{parsed.title}</span>
-                              </div>
-                            )}
-                            {parsed.tags.length > 0 && (
-                              <div style={styles.detailRow}>
-                                <span style={styles.detailLabel}>Tags:</span>
-                                <span style={styles.detailValue}>{parsed.tags.join(", ")}</span>
-                              </div>
-                            )}
-                            {parsed.energy !== null && (
-                              <div style={styles.detailRow}>
-                                <span style={styles.detailLabel}>Energy:</span>
-                                <span style={styles.detailValue}>{parsed.energy}/10</span>
-                              </div>
-                            )}
-                            <div style={styles.detailRow}>
-                              <span style={styles.detailLabel}>Cluster:</span>
-                              <span style={styles.detailValue}>
-                                {entry.cluster_label || `Cluster ${entry.cluster}`}
-                              </span>
-                            </div>
-                            <div style={styles.detailRow}>
-                              <span style={styles.detailLabel}>Time:</span>
-                              <span style={styles.detailValue}>
-                                {new Date(entry.timestamp).toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-                          {/* Similar Moods Section */}
-                          {similarMoods.length > 0 && (
-                            <div style={styles.similarMoodsSection}>
-                              <h4 style={styles.similarMoodsTitle}>Similar moods</h4>
-                              <ul style={styles.similarMoodsList}>
-                                {similarMoods.map(similarEntry => {
-                                  const similarParsed = parseMoodMetadata(similarEntry.mood);
-                                  return (
-                                    <li
-                                      key={similarEntry.timestamp}
-                                      style={styles.similarMoodItem}
-                                      onClick={() => setSelectedMood(similarEntry)}
-                                    >
-                                      <span style={styles.similarMoodText}>{similarParsed.text}</span>
-                                      <span style={styles.similarMoodTime}>
-                                        {new Date(similarEntry.timestamp).toLocaleDateString()}
-                                      </span>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <li
-                        key={entry.timestamp}
-                        style={{
-                          ...styles.listItem,
-                          ...getClusterStyle(entry.cluster),
-                          ...(isSelected ? styles.listItemSelected : {}),
-                          cursor: "pointer",
-                        }}
-                        onClick={() => setSelectedMood(isSelected ? null : entry)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = styles.hoverBg;
-                          e.currentTarget.style.transform = "translateX(4px)";
-                          e.currentTarget.style.borderColor = styles.hoverBorder;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = styles.listItem.background;
-                          e.currentTarget.style.transform = "translateX(0)";
-                          e.currentTarget.style.borderColor = styles.listItem.borderColor;
-                        }}
-                      >
-                        <div style={styles.moodContent}>
-                          <span style={styles.moodText}>{parsed.text}</span>
-                          <span style={styles.timestamp}>
-                            {new Date(entry.timestamp).toLocaleString()}
-                          </span>
-                        </div>
-                        {entry.cluster !== null && entry.cluster !== undefined && (
-                          <div style={{ fontSize: "0.8rem", opacity: 0.8, marginTop: "0.25rem" }}>
-                            {entry.cluster_label || `Cluster ${entry.cluster}`}
-                          </div>
-                        )}
-                      </li>
-                    </div>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+          {/* MoodList Component - replaces the inline list section */}
+          <MoodList
+            entries={filteredEntries}
+            selectedMood={selectedMood}
+            setSelectedMood={setSelectedMood}
+            similarMoods={similarMoods}
+            isLoading={isLoading}
+            hasTextOrDateFilters={hasTextOrDateFilters}
+            selectedCluster={selectedCluster}
+            styles={styles}
+            onClearList={handleClearList}
+          />
         </div>
       </div>
     </div>
