@@ -14,6 +14,8 @@ import { parseMoodMetadata, getClusterColor, getClusterStyle } from "./utils/moo
 import { stylesDark, stylesLight } from "./styles/appStyles";
 import StatsSection from "./components/StatsSection";
 import TrendsSection from "./components/TrendsSection";
+import MoodForm from "./components/MoodForm";
+import FiltersSection from "./components/FiltersSection";
 import "./App.css";
 
 const API_URL = "http://localhost:4000";
@@ -551,81 +553,19 @@ function App() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="app-form" style={styles.form}>
-            <input
-              style={styles.input}
-              placeholder="How are you feeling? (e.g., tired but wired...)"
-              value={mood}
-              onChange={(e) => setMood(e.target.value)}
-              disabled={isClustering}
-            />
-            <div style={styles.richFieldsGrid}>
-              <input
-                type="text"
-                style={styles.richInput}
-                placeholder="Title (optional)"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                disabled={isClustering}
-              />
-              <input
-                type="text"
-                style={styles.richInput}
-                placeholder="Tags, comma separated (optional)"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                disabled={isClustering}
-              />
-              <div style={styles.energyField}>
-                <label style={styles.energyLabel}>
-                  Energy: <span style={styles.energyValue}>{energy}</span>
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  value={energy}
-                  onChange={(e) => setEnergy(Number(e.target.value))}
-                  disabled={isClustering}
-                  style={styles.energySlider}
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              style={{
-                ...styles.button,
-                ...(isClustering ? styles.buttonDisabled : {}),
-              }}
-              disabled={isClustering}
-              onMouseEnter={(e) => {
-                if (!isClustering) {
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 6px 16px rgba(102, 126, 234, 0.4)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isClustering) {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(102, 126, 234, 0.3)";
-                }
-              }}
-              onMouseDown={(e) => {
-                if (!isClustering) {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(102, 126, 234, 0.3)";
-                }
-              }}
-              onMouseUp={(e) => {
-                if (!isClustering) {
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 6px 16px rgba(102, 126, 234, 0.4)";
-                }
-              }}
-            >
-              📝 Log Mood
-            </button>
-          </form>
+          <MoodForm
+            mood={mood}
+            setMood={setMood}
+            title={title}
+            setTitle={setTitle}
+            tags={tags}
+            setTags={setTags}
+            energy={energy}
+            setEnergy={setEnergy}
+            isClustering={isClustering}
+            styles={styles}
+            onSubmit={handleSubmit}
+          />
 
           <div className="divider" style={styles.divider}></div>
 
@@ -676,87 +616,20 @@ function App() {
           )}
 
           {/* Enhanced Filters Section */}
-          <div className="filters-section" style={styles.filtersSection}>
-            <div className="filters-wrapper" style={styles.filtersWrapper}>
-              <div style={{ flex: 1, minWidth: "200px", position: "relative" }}>
-                <input
-                  type="text"
-                  placeholder="Search moods..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={styles.searchInput}
-                />
-                {isSearching && (
-                  <span style={{
-                    position: "absolute",
-                    right: "1rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    fontSize: "0.9rem",
-                    opacity: 0.7
-                  }}>
-                    🔍
-                  </span>
-                )}
-              </div>
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                style={styles.dateSelect}
-              >
-                <option value="all">All time</option>
-                <option value="7days">Last 7 days</option>
-                <option value="30days">Last 30 days</option>
-              </select>
-            </div>
-
-            <div className="rich-filters-wrapper" style={styles.richFiltersWrapper}>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                placeholder="Min energy level"
-                value={energyFilter}
-                onChange={(e) => setEnergyFilter(e.target.value)}
-                style={styles.energyFilterInput}
-              />
-              <input
-                type="text"
-                placeholder="Filter by tags..."
-                value={tagsFilter}
-                onChange={(e) => setTagsFilter(e.target.value)}
-                style={styles.tagsFilterInput}
-              />
-            </div>
-
-            {/* Cluster Filter - Pill Style */}
-            <div className="pill-filter-section" style={styles.pillFilterSection}>
-              <span style={styles.pillFilterLabel}>Filter by cluster:</span>
-              <button
-                onClick={() => setSelectedCluster("all")}
-                style={{
-                  ...styles.pillButton,
-                  ...(selectedCluster === "all" ? styles.pillButtonActive : {}),
-                }}
-              >
-                All
-              </button>
-              {[0, 1, 2].map((clusterId) => (
-                <button
-                  key={clusterId}
-                  onClick={() => setSelectedCluster(String(clusterId))}
-                  style={{
-                    ...styles.pillButton,
-                    ...(selectedCluster === String(clusterId) ? styles.pillButtonActive : {}),
-                    borderColor: getClusterColor(clusterId),
-                  }}
-                >
-                  <ClusterDot color={getClusterColor(clusterId)} />
-                  Cluster {clusterId}
-                </button>
-              ))}
-            </div>
-          </div>
+          <FiltersSection
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            energyFilter={energyFilter}
+            setEnergyFilter={setEnergyFilter}
+            tagsFilter={tagsFilter}
+            setTagsFilter={setTagsFilter}
+            selectedCluster={selectedCluster}
+            setSelectedCluster={setSelectedCluster}
+            isSearching={isSearching}
+            styles={styles}
+          />
 
           <div className="list-section" style={styles.listSection}>
             <div className="list-header" style={styles.listHeader}>
