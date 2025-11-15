@@ -5,6 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { Pool } = require("pg");
+const { initializeLLMClient } = require("./services/agentService");
+const agentRoutes = require("./routes/agentRoutes");
 require("dotenv").config();
 
 const app = express();
@@ -13,6 +15,12 @@ const PORT = 4000;
 // middleware
 app.use(cors());
 app.use(express.json());
+
+// Initialize LLM client for agent service (Stage 1)
+initializeLLMClient();
+
+// Mount agent routes
+app.use("/agent", agentRoutes);
 
 const filePath = path.join(__dirname, "moods.json");
 const clusteredFilePath = path.join(__dirname, "mood_clusters.json");
