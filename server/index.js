@@ -7,6 +7,9 @@ const { spawn } = require("child_process");
 const { Pool } = require("pg");
 require("dotenv").config();
 
+// Import agent routes AFTER dotenv config
+const agentRoutes = require("./routes/agentRoutes");
+
 const app = express();
 const PORT = 4000;
 
@@ -490,22 +493,25 @@ app.get("/moods/db-preview", async (req, res, next) => {
 app.get("/moods/stats", (req, res, next) => {
   try {
     const moods = loadMoods();
-    
+
     const total = moods.length;
     const counts = {};
-    
+
     moods.forEach((entry) => {
       if (entry && entry.mood) {
         const moodText = entry.mood.trim();
         counts[moodText] = (counts[moodText] || 0) + 1;
       }
     });
-    
+
     res.json({ total, counts });
   } catch (err) {
     next(err);
   }
 });
+
+// Mount agent routes
+app.use("/agent", agentRoutes);
 
 // Error handling middleware - must be defined after all routes
 app.use((err, req, res, next) => {
