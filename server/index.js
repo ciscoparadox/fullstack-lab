@@ -5,7 +5,6 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { Pool } = require("pg");
-const { initializeLLMClient } = require("./services/agentService");
 const agentRoutes = require("./routes/agentRoutes");
 require("dotenv").config();
 
@@ -15,9 +14,6 @@ const PORT = 4000;
 // middleware
 app.use(cors());
 app.use(express.json());
-
-// Initialize LLM client for agent service (Stage 1)
-initializeLLMClient();
 
 // Mount agent routes
 app.use("/agent", agentRoutes);
