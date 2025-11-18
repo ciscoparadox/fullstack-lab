@@ -114,6 +114,13 @@ function App() {
   const [tagsFilter, setTagsFilter] = useState("");
   const [selectedMood, setSelectedMood] = useState(null);
 
+  // Agent tester state
+  const [agentMessage, setAgentMessage] = useState("");
+  const [agentMode, setAgentMode] = useState("dev_ritual");
+  const [agentProvider, setAgentProvider] = useState("deepseek");
+  const [agentResult, setAgentResult] = useState(null);
+  const [isAgentLoading, setIsAgentLoading] = useState(false);
+
   // Load theme from localStorage on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -405,6 +412,41 @@ function App() {
     }
   };
 
+  // Handle agent run
+  async function handleAgentRun(e) {
+    e.preventDefault();
+    if (!agentMessage.trim()) return;
+
+    setIsAgentLoading(true);
+    setAgentResult(null);
+
+    try {
+      const response = await fetch(`${API_URL}/agent/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: agentMessage,
+          mode: agentMode,
+          provider: agentProvider || "deepseek",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setAgentResult(data.result?.answer || JSON.stringify(data, null, 2));
+    } catch (err) {
+      console.error("Agent request failed", err);
+      setAgentResult(`Error: ${err.message}`);
+    } finally {
+      setIsAgentLoading(false);
+    }
+  }
+
   // Filter entries based on selected cluster, search query, date range, energy, and tags
   const filteredEntries = useMemo(() => {
     // Use search results if there's an active search, otherwise use all entries
@@ -569,6 +611,155 @@ function App() {
           />
 
           <div className="divider" style={styles.divider}></div>
+
+          {/* Agent Tester */}
+          <div style={{
+            backgroundColor: theme === "dark" ? "#2d3748" : "#f7fafc",
+            padding: "1.5rem",
+            borderRadius: "12px",
+            marginBottom: "1.5rem",
+            border: theme === "dark" ? "1px solid #4a5568" : "1px solid #e2e8f0",
+          }}>
+            <h3 style={{
+              margin: "0 0 1rem 0",
+              fontSize: "1.1rem",
+              color: theme === "dark" ? "#e2e8f0" : "#2d3748",
+              fontWeight: 600,
+            }}>
+              🤖 Agent Tester
+            </h3>
+            <form onSubmit={handleAgentRun}>
+              <div style={{ marginBottom: "1rem" }}>
+                <label style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontSize: "0.9rem",
+                  color: theme === "dark" ? "#cbd5e0" : "#4a5568",
+                }}>
+                  Message
+                </label>
+                <textarea
+                  value={agentMessage}
+                  onChange={(e) => setAgentMessage(e.target.value)}
+                  placeholder="Enter your message..."
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem",
+                    borderRadius: "8px",
+                    border: theme === "dark" ? "1px solid #4a5568" : "1px solid #cbd5e0",
+                    backgroundColor: theme === "dark" ? "#1a202c" : "#ffffff",
+                    color: theme === "dark" ? "#e2e8f0" : "#2d3748",
+                    fontSize: "0.95rem",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 200px" }}>
+                  <label style={{
+                    display: "block",
+                    marginBottom: "0.5rem",
+                    fontSize: "0.9rem",
+                    color: theme === "dark" ? "#cbd5e0" : "#4a5568",
+                  }}>
+                    Mode
+                  </label>
+                  <select
+                    value={agentMode}
+                    onChange={(e) => setAgentMode(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem",
+                      borderRadius: "8px",
+                      border: theme === "dark" ? "1px solid #4a5568" : "1px solid #cbd5e0",
+                      backgroundColor: theme === "dark" ? "#1a202c" : "#ffffff",
+                      color: theme === "dark" ? "#e2e8f0" : "#2d3748",
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    <option value="dev_ritual">dev_ritual</option>
+                    <option value="chat">chat</option>
+                    <option value="code">code</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: "1 1 200px" }}>
+                  <label style={{
+                    display: "block",
+                    marginBottom: "0.5rem",
+                    fontSize: "0.9rem",
+                    color: theme === "dark" ? "#cbd5e0" : "#4a5568",
+                  }}>
+                    Provider (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={agentProvider}
+                    onChange={(e) => setAgentProvider(e.target.value)}
+                    placeholder="deepseek"
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem",
+                      borderRadius: "8px",
+                      border: theme === "dark" ? "1px solid #4a5568" : "1px solid #cbd5e0",
+                      backgroundColor: theme === "dark" ? "#1a202c" : "#ffffff",
+                      color: theme === "dark" ? "#e2e8f0" : "#2d3748",
+                      fontSize: "0.95rem",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isAgentLoading || !agentMessage.trim()}
+                style={{
+                  padding: "0.75rem 1.5rem",
+                  borderRadius: "8px",
+                  border: "none",
+                  backgroundColor: isAgentLoading || !agentMessage.trim() ? "#718096" : "#667eea",
+                  color: "#ffffff",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  cursor: isAgentLoading || !agentMessage.trim() ? "not-allowed" : "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {isAgentLoading ? "Running..." : "Run Agent"}
+              </button>
+            </form>
+
+            {agentResult && (
+              <div style={{
+                marginTop: "1.5rem",
+                padding: "1rem",
+                borderRadius: "8px",
+                backgroundColor: theme === "dark" ? "#1a202c" : "#ffffff",
+                border: theme === "dark" ? "1px solid #4a5568" : "1px solid #e2e8f0",
+              }}>
+                <h4 style={{
+                  margin: "0 0 0.75rem 0",
+                  fontSize: "0.9rem",
+                  color: theme === "dark" ? "#cbd5e0" : "#4a5568",
+                  fontWeight: 600,
+                }}>
+                  Result:
+                </h4>
+                <pre style={{
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: "0.9rem",
+                  color: theme === "dark" ? "#e2e8f0" : "#2d3748",
+                  lineHeight: "1.6",
+                }}>
+                  {agentResult}
+                </pre>
+              </div>
+            )}
+          </div>
 
           {/* Cluster Stats Panel */}
           {clusterStats.totalClustered > 0 && (

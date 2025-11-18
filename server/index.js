@@ -4,11 +4,12 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
-const { Pool } = require("pg");
-require("dotenv").config();
+const { pool, poolReady } = require("./db/pool");
+const config = require("./utils/config");
+const logger = require("./utils/logger");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
-const PORT = 4000;
 
 // middleware
 app.use(cors());
@@ -34,41 +35,42 @@ async function ensureMoodsTable() {
 
   try {
     await pool.query(createSql);
-    console.log("[DB] Ensured moods table exists");
+    logger.info("[DB] Ensured moods table exists");
   } catch (err) {
-    console.warn("[DB] Failed to ensure moods table:", err.message);
+    logger.warn("[DB] Failed to ensure moods table", { error: err.message });
   }
 }
 
-// Optional Postgres pool (used as a secondary sink)
-let pool = null;
-if (process.env.DATABASE_URL) {
+/**
+ * Ensure users table exists (safe no-op if already created)
+ */
+async function ensureUsersTable() {
+  if (!pool) return;
+
+  const createSql = `
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
+
   try {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-    });
-
-    pool
-      .connect()
-      .then((client) => {
-        client.release();
-        console.log("[DB] Connected to Postgres");
-        // Ensure the moods table after a confirmed connection
-        ensureMoodsTable();
-      })
-      .catch((err) => {
-        console.warn(
-          `[DB] Failed to connect to Postgres at startup: ${err.message}`
-        );
-        pool = null;
-      });
+    await pool.query(createSql);
+    logger.info("[DB] Ensured users table exists");
   } catch (err) {
-    console.warn(`[DB] Error setting up Postgres pool: ${err.message}`);
-    pool = null;
+    logger.warn("[DB] Failed to ensure users table", { error: err.message });
   }
-} else {
-  console.log("[DB] DATABASE_URL not set. Skipping Postgres setup.");
 }
+
+// Initialize database tables after pool is ready
+poolReady.then((connectedPool) => {
+  if (connectedPool) {
+    ensureMoodsTable();
+    ensureUsersTable();
+  }
+});
 
 /**
  * Load moods from file with robust error handling
@@ -76,26 +78,28 @@ if (process.env.DATABASE_URL) {
  */
 function loadMoods() {
   if (!fs.existsSync(filePath)) {
-    console.log("[loadMoods] moods.json not found, returning empty array");
+    logger.info("[loadMoods] moods.json not found, returning empty array");
     return [];
   }
 
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     if (!raw.trim()) {
-      console.log("[loadMoods] moods.json is empty, returning empty array");
+      logger.info("[loadMoods] moods.json is empty, returning empty array");
       return [];
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      console.warn(
+      logger.warn(
         "[loadMoods] moods.json did not contain an array, returning empty array"
       );
       return [];
     }
     return parsed;
   } catch (err) {
-    console.warn(`[loadMoods] Failed to parse moods.json: ${err.message}`);
+    logger.warn("[loadMoods] Failed to parse moods.json", {
+      error: err.message,
+    });
     return [];
   }
 }
@@ -108,7 +112,9 @@ function saveMoods(moods) {
   try {
     fs.writeFileSync(filePath, JSON.stringify(moods, null, 2));
   } catch (err) {
-    console.error(`[saveMoods] Failed to write moods.json: ${err.message}`);
+    logger.error("[saveMoods] Failed to write moods.json", {
+      error: err.message,
+    });
     throw err;
   }
 }
@@ -119,7 +125,7 @@ function saveMoods(moods) {
  */
 function loadClusteredMoods() {
   if (!fs.existsSync(clusteredFilePath)) {
-    console.log(
+    logger.info(
       "[loadClusteredMoods] mood_clusters.json not found, returning empty array"
     );
     return [];
@@ -128,26 +134,26 @@ function loadClusteredMoods() {
   try {
     const raw = fs.readFileSync(clusteredFilePath, "utf8");
     if (!raw.trim()) {
-      console.log(
+      logger.info(
         "[loadClusteredMoods] mood_clusters.json is empty, returning empty array"
       );
       return [];
     }
     const clustered = JSON.parse(raw);
     if (!Array.isArray(clustered)) {
-      console.warn(
+      logger.warn(
         "[loadClusteredMoods] mood_clusters.json did not contain an array, returning empty array"
       );
       return [];
     }
-    console.log(
+    logger.info(
       `[loadClusteredMoods] Loaded ${clustered.length} clustered entries`
     );
     return clustered;
   } catch (err) {
-    console.warn(
-      `[loadClusteredMoods] Failed to parse mood_clusters.json: ${err.message}`
-    );
+    logger.warn("[loadClusteredMoods] Failed to parse mood_clusters.json", {
+      error: err.message,
+    });
     return [];
   }
 }
@@ -164,21 +170,27 @@ function loadClusterMeta() {
   };
 
   if (!fs.existsSync(clusterMetaPath)) {
-    console.log("[loadClusterMeta] cluster_meta.json not found, returning default");
+    logger.info(
+      "[loadClusterMeta] cluster_meta.json not found, returning default"
+    );
     return defaultMeta;
   }
 
   try {
     const raw = fs.readFileSync(clusterMetaPath, "utf8");
     if (!raw.trim()) {
-      console.log("[loadClusterMeta] cluster_meta.json is empty, returning default");
+      logger.info(
+        "[loadClusterMeta] cluster_meta.json is empty, returning default"
+      );
       return defaultMeta;
     }
     const meta = JSON.parse(raw);
 
     // Validate structure
     if (!meta.clusters || !Array.isArray(meta.clusters)) {
-      console.warn("[loadClusterMeta] Invalid clusters format in cluster_meta.json");
+      logger.warn(
+        "[loadClusterMeta] Invalid clusters format in cluster_meta.json"
+      );
       return defaultMeta;
     }
 
@@ -190,14 +202,14 @@ function loadClusterMeta() {
       meta.quality_rating = defaultMeta.quality_rating;
     }
 
-    console.log(
+    logger.info(
       `[loadClusterMeta] Loaded metadata for ${meta.clusters.length} clusters`
     );
     return meta;
   } catch (err) {
-    console.warn(
-      `[loadClusterMeta] Failed to parse cluster_meta.json: ${err.message}`
-    );
+    logger.warn("[loadClusterMeta] Failed to parse cluster_meta.json", {
+      error: err.message,
+    });
     return defaultMeta;
   }
 }
@@ -208,14 +220,16 @@ function loadClusterMeta() {
  */
 function runClusteringScript() {
   return new Promise((resolve) => {
-    console.log("[runClusteringScript] Starting Python clustering process...");
+    logger.info("[runClusteringScript] Starting Python clustering process...");
 
     const scriptPath = path.join(__dirname, "..", "ml", "cluster_moods.py");
 
     // Check if script exists before attempting to run
     if (!fs.existsSync(scriptPath)) {
       const errorMsg = `Clustering script not found at ${scriptPath}`;
-      console.error(`[runClusteringScript] ${errorMsg}`);
+      logger.error("[runClusteringScript] Script not found", {
+        path: scriptPath,
+      });
       resolve({ success: false, message: errorMsg });
       return;
     }
@@ -232,20 +246,20 @@ function runClusteringScript() {
     pythonProcess.stdout.on("data", (data) => {
       const output = data.toString();
       stdoutData += output;
-      console.log(`[Python stdout] ${output.trim()}`);
+      logger.info(`[Python stdout] ${output.trim()}`);
     });
 
     // Capture stderr
     pythonProcess.stderr.on("data", (data) => {
       const output = data.toString();
       stderrData += output;
-      console.error(`[Python stderr] ${output.trim()}`);
+      logger.error(`[Python stderr] ${output.trim()}`);
     });
 
     // Handle process completion
     pythonProcess.on("close", (code) => {
       if (code === 0) {
-        console.log("[runClusteringScript] Clustering completed successfully");
+        logger.info("[runClusteringScript] Clustering completed successfully");
         resolve({
           success: true,
           message: "Clustering completed successfully",
@@ -253,8 +267,10 @@ function runClusteringScript() {
         });
       } else {
         const errorMsg = `Clustering script exited with code ${code}`;
-        console.error(`[runClusteringScript] ${errorMsg}`);
-        console.error(`[runClusteringScript] stderr: ${stderrData}`);
+        logger.error("[runClusteringScript] Script failed", {
+          exitCode: code,
+          stderr: stderrData,
+        });
         resolve({
           success: false,
           message: `${errorMsg}. Check server logs for details.`,
@@ -266,7 +282,9 @@ function runClusteringScript() {
     // Handle spawn errors (e.g., Python not found)
     pythonProcess.on("error", (err) => {
       const errorMsg = `Failed to spawn Python process: ${err.message}`;
-      console.error(`[runClusteringScript] ${errorMsg}`);
+      logger.error("[runClusteringScript] Failed to spawn process", {
+        error: err.message,
+      });
       resolve({
         success: false,
         message:
@@ -290,12 +308,12 @@ function insertMoodIntoDb(entry) {
   pool
     .query(text, values)
     .then(() => {
-      console.log("[DB] Inserted mood into Postgres");
+      logger.info("[DB] Inserted mood into Postgres");
     })
     .catch((err) => {
-      console.warn(
-        `[DB] Failed to insert mood into Postgres: ${err.message}`
-      );
+      logger.warn("[DB] Failed to insert mood into Postgres", {
+        error: err.message,
+      });
     });
 }
 
@@ -339,6 +357,24 @@ function getEnrichedMoods() {
     };
   });
 }
+
+// Mount auth routes
+app.use("/auth", authRoutes);
+
+// Health check routes
+app.get("/health/live", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+app.get("/health/ready", (req, res) => {
+  if (!pool) {
+    return res.status(503).json({
+      status: "not ready",
+      reason: "Database not configured",
+    });
+  }
+  res.status(200).json({ status: "ready" });
+});
 
 // GET /moods -> moods enriched with cluster and metadata if available
 app.get("/moods", (req, res, next) => {
@@ -410,9 +446,10 @@ app.post("/moods", (req, res, next) => {
     moods.push(entry);
     saveMoods(moods);
 
-    console.log(
-      `[POST /moods] Created mood: "${entry.mood}" at ${entry.timestamp}`
-    );
+    logger.info(`[POST /moods] Created mood`, {
+      mood: entry.mood,
+      timestamp: entry.timestamp,
+    });
 
     // Fire-and-forget DB insert; if it fails, file storage still succeeded
     insertMoodIntoDb(entry);
@@ -426,7 +463,7 @@ app.post("/moods", (req, res, next) => {
 // POST /moods/cluster -> trigger clustering script
 app.post("/moods/cluster", async (req, res, next) => {
   try {
-    console.log("[POST /moods/cluster] Clustering request received");
+    logger.info("[POST /moods/cluster] Clustering request received");
 
     // Check if there are moods to cluster
     const moods = loadMoods();
@@ -474,7 +511,9 @@ app.get("/moods/db-preview", async (req, res, next) => {
 
     res.json(rows);
   } catch (err) {
-    console.error("[GET /moods/db-preview] Error reading from Postgres:", err);
+    logger.error("[GET /moods/db-preview] Error reading from Postgres", {
+      error: err.message,
+    });
 
     // If table somehow still doesn't exist, degrade gracefully
     if (err.code === "42P01") {
@@ -490,17 +529,17 @@ app.get("/moods/db-preview", async (req, res, next) => {
 app.get("/moods/stats", (req, res, next) => {
   try {
     const moods = loadMoods();
-    
+
     const total = moods.length;
     const counts = {};
-    
+
     moods.forEach((entry) => {
       if (entry && entry.mood) {
         const moodText = entry.mood.trim();
         counts[moodText] = (counts[moodText] || 0) + 1;
       }
     });
-    
+
     res.json({ total, counts });
   } catch (err) {
     next(err);
@@ -509,12 +548,14 @@ app.get("/moods/stats", (req, res, next) => {
 
 // Error handling middleware - must be defined after all routes
 app.use((err, req, res, next) => {
-  console.error("[Error Middleware] Unhandled error:");
-  console.error(err.stack);
+  logger.error("[Error Middleware] Unhandled error", {
+    error: err.message,
+    stack: err.stack,
+  });
 
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(PORT, () => {
-  console.log(`[Server] Listening on http://localhost:${PORT}`);
+app.listen(config.PORT, () => {
+  logger.info(`[Server] Listening on http://localhost:${config.PORT}`);
 });

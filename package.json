@@ -3,20 +3,20 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  
   "scripts": {
-  "dev:server": "npm --prefix server run dev",
-  "dev:client": "npm --prefix client run dev -- --host",
-  "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-  "ml:cluster": "cd ml && .venv/bin/python cluster_moods.py"
-},
-
-
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev -- --host",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "ml:cluster": "cd ml && .venv/bin/python cluster_moods.py"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "concurrently": "^9.0.0"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.2"
   }
 }
-
