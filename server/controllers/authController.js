@@ -1,5 +1,5 @@
 // server/controllers/authController.js
-const userService = require("../services/userService");
+const userRepo = require("../db/userRepo");
 const authService = require("../services/authService");
 const logger = require("../utils/logger");
 
@@ -12,13 +12,50 @@ async function register(req, res, next) {
   try {
     const { email, password } = req.body || {};
 
-    // Register user
-    const user = await userService.registerUser({ email, password });
+    // Validate input
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        error: "Password must be at least 6 characters",
+      });
+    }
+
+    const emailLower = email.trim().toLowerCase();
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailLower)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    // Check if user already exists
+    const existing = await userRepo.findByEmail(emailLower);
+    if (existing) {
+      return res.status(400).json({ error: "Email already registered" });
+    }
+
+    // Hash password using authService
+    const passwordHash = await authService.hashPassword(password);
+
+    // Create user
+    const user = await userRepo.createUser({
+      email: emailLower,
+      passwordHash,
+    });
 
     // Generate token
-    const token = authService.generateToken(user);
+    const token = authService.generateToken({
+      id: user.id,
+      email: user.email,
+    });
 
-    logger.info("[Auth] User registered", { userId: user.id, email: user.email });
+    logger.info("[Auth] User registered", {
+      userId: user.id,
+      email: user.email,
+    });
 
     res.status(201).json({
       message: "User registered successfully",
@@ -30,16 +67,7 @@ async function register(req, res, next) {
       },
     });
   } catch (err) {
-    // Handle validation/business logic errors
-    if (
-      err.message.includes("Email") ||
-      err.message.includes("Password") ||
-      err.message.includes("already registered")
-    ) {
-      return res.status(400).json({ error: err.message });
-    }
-
-    // Pass other errors to error middleware
+    logger.error("[Auth] Registration error", { error: err.message });
     next(err);
   }
 }
@@ -53,13 +81,40 @@ async function login(req, res, next) {
   try {
     const { email, password } = req.body || {};
 
-    // Verify credentials
-    const user = await userService.verifyCredentials({ email, password });
+    // Validate input
+    if (!email || !password) {
+      return res.status(401).json({
+        error: "Email and password are required",
+      });
+    }
+
+    const emailLower = email.trim().toLowerCase();
+
+    // Find user by email
+    const user = await userRepo.findByEmail(emailLower);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    // Verify password using authService
+    const isValid = await authService.comparePassword(
+      password,
+      user.password_hash
+    );
+    if (!isValid) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
 
     // Generate token
-    const token = authService.generateToken(user);
+    const token = authService.generateToken({
+      id: user.id,
+      email: user.email,
+    });
 
-    logger.info("[Auth] User logged in", { userId: user.id, email: user.email });
+    logger.info("[Auth] User logged in", {
+      userId: user.id,
+      email: user.email,
+    });
 
     res.json({
       message: "Login successful",
@@ -71,16 +126,7 @@ async function login(req, res, next) {
       },
     });
   } catch (err) {
-    // Handle credential validation errors
-    if (
-      err.message.includes("Email") ||
-      err.message.includes("password") ||
-      err.message.includes("Invalid")
-    ) {
-      return res.status(401).json({ error: err.message });
-    }
-
-    // Pass other errors to error middleware
+    logger.error("[Auth] Login error", { error: err.message });
     next(err);
   }
 }
@@ -89,3 +135,4 @@ module.exports = {
   register,
   login,
 };
+

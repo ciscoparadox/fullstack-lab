@@ -22,7 +22,7 @@ function authenticateToken(req, res, next) {
     logger.warn("[Auth Middleware] Token verification failed", {
       error: err.message,
     });
-    return res.status(403).json({ error: err.message });
+    return res.status(401).json({ error: err.message });
   }
 }
 
