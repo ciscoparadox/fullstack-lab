@@ -1,27 +1,32 @@
 // server/services/authService.js
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
 const config = require("../utils/config");
 
-const SALT_ROUNDS = 10;
+// Import our new abstraction
+// We alias them to 'Impl' (implementation) to avoid naming collisions with the functions below
+const { 
+  hashPassword: hashImpl, 
+  verifyPassword: verifyImpl 
+} = require("../utils/password");
 
 /**
- * Hash a plaintext password using bcrypt
+ * Hash a plaintext password using the safe abstraction (Node or Bun)
  * @param {string} plainPassword - The plaintext password
  * @returns {Promise<string>} The hashed password
  */
 async function hashPassword(plainPassword) {
-  return bcrypt.hash(plainPassword, SALT_ROUNDS);
+  // SALT_ROUNDS is now handled inside utils/password.js
+  return hashImpl(plainPassword);
 }
 
 /**
- * Compare a plaintext password against a bcrypt hash
+ * Compare a plaintext password against a hash using the safe abstraction
  * @param {string} plainPassword - The plaintext password
  * @param {string} hash - The bcrypt hash to compare against
  * @returns {Promise<boolean>} True if passwords match, false otherwise
  */
 async function comparePassword(plainPassword, hash) {
-  return bcrypt.compare(plainPassword, hash);
+  return verifyImpl(plainPassword, hash);
 }
 
 /**
@@ -78,4 +83,3 @@ module.exports = {
   generateToken,
   verifyToken,
 };
-
