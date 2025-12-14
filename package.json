@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "codex": "^0.2.3",
     "jsonwebtoken": "^9.0.2"
   }
 }
