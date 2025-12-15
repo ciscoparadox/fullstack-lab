@@ -362,6 +362,15 @@ function getEnrichedMoods() {
 app.use("/auth", authRoutes);
 
 // Health check routes
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    ts: new Date().toISOString(),
+    uptime_s: Math.floor(process.uptime())
+  });
+});
+
+
 app.get("/health/live", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
